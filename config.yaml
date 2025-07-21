@@ -1,0 +1,15 @@
+server:
+  port: "8080"
+  host: "localhost"
+
+database:
+  type: "memory"
+  path: ""
+
+logging:
+  level: "info"
+  format: "json"
+
+agent:
+  default_provider: ""
+  timeout: 30
