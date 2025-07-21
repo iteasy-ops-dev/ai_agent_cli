@@ -14,7 +14,7 @@ AI agent for system engineering tasks with dynamic MCP server and LLM provider m
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/syseng-agent
+git clone https://github.com/iteasy-ops-dev/syseng-agent
 cd syseng-agent
 go mod tidy
 go build -o syseng-agent main.go

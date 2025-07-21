@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/yourusername/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
 // MockMCPProcess simulates an MCP server for testing
@@ -83,12 +83,12 @@ func (p *MockMCPProcess) CallTool(name string, arguments map[string]interface{})
 		if pathArg, ok := arguments["path"].(string); ok {
 			path = pathArg
 		}
-		
+
 		entries, err := os.ReadDir(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read directory: %w", err)
 		}
-		
+
 		var files []map[string]interface{}
 		for _, entry := range entries {
 			info, _ := entry.Info()
@@ -99,7 +99,7 @@ func (p *MockMCPProcess) CallTool(name string, arguments map[string]interface{})
 				"modTime": info.ModTime().Format(time.RFC3339),
 			})
 		}
-		
+
 		return map[string]interface{}{
 			"path":  path,
 			"files": files,
@@ -110,12 +110,12 @@ func (p *MockMCPProcess) CallTool(name string, arguments map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("path argument is required")
 		}
-		
+
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read file: %w", err)
 		}
-		
+
 		return map[string]interface{}{
 			"path":    path,
 			"content": string(content),
@@ -127,7 +127,7 @@ func (p *MockMCPProcess) CallTool(name string, arguments map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("command argument is required")
 		}
-		
+
 		// For safety, only allow safe commands in mock
 		switch command {
 		case "pwd":

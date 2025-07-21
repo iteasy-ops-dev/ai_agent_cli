@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/yourusername/syseng-agent/internal/llm"
-	"github.com/yourusername/syseng-agent/internal/mcp"
-	"github.com/yourusername/syseng-agent/internal/ui"
-	"github.com/yourusername/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/internal/llm"
+	"github.com/iteasy-ops-dev/syseng-agent/internal/mcp"
+	"github.com/iteasy-ops-dev/syseng-agent/internal/ui"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
 type Agent struct {
@@ -36,33 +36,33 @@ func (a *Agent) ProcessRequest(message, mcpServerID, providerID string) (*types.
 		ProviderID:  providerID,
 		CreatedAt:   time.Now(),
 	}
-	
+
 	response := &types.AgentResponse{
 		ID:        uuid.New().String(),
 		RequestID: request.ID,
 		CreatedAt: time.Now(),
 	}
-	
+
 	var provider *types.LLMProvider
 	var err error
-	
+
 	if providerID != "" {
 		provider, err = a.llmManager.GetProvider(providerID)
 	} else {
 		provider, err = a.llmManager.GetActiveProvider()
 	}
-	
+
 	if err != nil {
 		response.Error = fmt.Sprintf("Provider error: %v", err)
 		return response, nil
 	}
-	
+
 	processedMessage, err := a.processWithLLM(message, provider)
 	if err != nil {
 		response.Error = fmt.Sprintf("LLM processing error: %v", err)
 		return response, nil
 	}
-	
+
 	if mcpServerID != "" {
 		mcpData, err := a.processWithMCP(processedMessage, mcpServerID)
 		if err != nil {
@@ -71,7 +71,7 @@ func (a *Agent) ProcessRequest(message, mcpServerID, providerID string) (*types.
 		}
 		response.Data = mcpData
 	}
-	
+
 	response.Message = processedMessage
 	return response, nil
 }
@@ -87,9 +87,9 @@ func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, in
 		base := ui.NewNonInteractiveDisplay()
 		display = ui.NewTimedProgressDisplay(ui.NewSpinnerDisplay(base))
 	}
-	
+
 	display.ShowProgress("Initializing AI agent...")
-	
+
 	request := &types.AgentRequest{
 		ID:          uuid.New().String(),
 		Message:     message,
@@ -97,37 +97,37 @@ func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, in
 		ProviderID:  providerID,
 		CreatedAt:   time.Now(),
 	}
-	
+
 	response := &types.AgentResponse{
 		ID:        uuid.New().String(),
 		RequestID: request.ID,
 		CreatedAt: time.Now(),
 	}
-	
+
 	var provider *types.LLMProvider
 	var err error
-	
+
 	display.ShowProgress("Finding LLM provider...")
-	
+
 	if providerID != "" {
 		provider, err = a.llmManager.GetProvider(providerID)
 	} else {
 		provider, err = a.llmManager.GetActiveProvider()
 	}
-	
+
 	if err != nil {
 		display.ShowError(fmt.Errorf("Provider error: %v", err))
 		response.Error = fmt.Sprintf("Provider error: %v", err)
 		return response, nil
 	}
-	
+
 	processedMessage, err := a.processWithLLMAndUI(message, provider, display)
 	if err != nil {
 		display.ShowError(fmt.Errorf("LLM processing error: %v", err))
 		response.Error = fmt.Sprintf("LLM processing error: %v", err)
 		return response, nil
 	}
-	
+
 	if mcpServerID != "" {
 		display.ShowProgress("Processing with MCP server...")
 		mcpData, err := a.processWithMCP(processedMessage, mcpServerID)
@@ -138,7 +138,7 @@ func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, in
 		}
 		response.Data = mcpData
 	}
-	
+
 	response.Message = processedMessage
 	return response, nil
 }
@@ -147,7 +147,7 @@ func (a *Agent) processWithLLM(message string, provider *types.LLMProvider) (str
 	// Get all available MCP tools
 	allTools := a.mcpManager.GetAllTools()
 	var mcpTools []map[string]interface{}
-	
+
 	for serverName, tools := range allTools {
 		for _, tool := range tools {
 			// Clean server name for tool naming (remove spaces and special chars)
@@ -162,7 +162,7 @@ func (a *Agent) processWithLLM(message string, provider *types.LLMProvider) (str
 			mcpTools = append(mcpTools, mcpTool)
 		}
 	}
-	
+
 	switch provider.Type {
 	case "openai":
 		return a.processOpenAIWithMCP(message, provider, mcpTools)
@@ -182,7 +182,7 @@ func (a *Agent) processWithLLMAndUI(message string, provider *types.LLMProvider,
 	// Get all available MCP tools
 	allTools := a.mcpManager.GetAllTools()
 	var mcpTools []map[string]interface{}
-	
+
 	for serverName, tools := range allTools {
 		for _, tool := range tools {
 			// Clean server name for tool naming (remove spaces and special chars)
@@ -197,7 +197,7 @@ func (a *Agent) processWithLLMAndUI(message string, provider *types.LLMProvider,
 			mcpTools = append(mcpTools, mcpTool)
 		}
 	}
-	
+
 	switch provider.Type {
 	case "openai":
 		return a.processOpenAIWithMCPAndUI(message, provider, mcpTools, display)
@@ -225,10 +225,10 @@ func (a *Agent) processOpenAIWithMCP(message string, provider *types.LLMProvider
 Available tools: %d desktop tools including file operations, system commands, and process management.
 Use multiple tools as needed to provide comprehensive answers.`, message, len(mcpTools))
 	}
-	
+
 	// Convert MCP tools to OpenAI format
 	tools := llm.ConvertMCPToolsToOpenAI(mcpTools)
-	
+
 	// Create tool caller function
 	toolCaller := func(name string, args map[string]interface{}) (interface{}, error) {
 		// Find the corresponding MCP tool
@@ -236,7 +236,7 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 			if mcpTool["name"] == name {
 				serverName := mcpTool["serverName"].(string)
 				toolName := mcpTool["toolName"].(string)
-				
+
 				// Find server ID by name
 				servers := a.mcpManager.ListServers()
 				for _, server := range servers {
@@ -249,12 +249,12 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 		}
 		return nil, fmt.Errorf("tool %s not found", name)
 	}
-	
+
 	// If no tools available, fall back to regular call
 	if len(tools) == 0 {
 		return llm.CallOpenAI(provider, enhancedMessage)
 	}
-	
+
 	return llm.CallOpenAIWithTools(provider, enhancedMessage, tools, toolCaller)
 }
 
@@ -268,26 +268,26 @@ func (a *Agent) processOpenAIWithMCPAndUI(message string, provider *types.LLMPro
 Available tools: %d desktop tools including file operations, system commands, and process management.
 Use multiple tools as needed to provide comprehensive answers.`, message, len(mcpTools))
 	}
-	
+
 	// Convert MCP tools to OpenAI format
 	tools := llm.ConvertMCPToolsToOpenAI(mcpTools)
-	
+
 	// Create execution summary tracker
 	summary := ui.ExecutionSummary{
 		ToolCalls: []ui.ToolCallRecord{},
 	}
-	
+
 	// Track user control state
 	var userAborted bool
 	var autoApproveAll bool
-	
+
 	// Create tool caller function with UI feedback
 	toolCaller := func(name string, args map[string]interface{}) (interface{}, error) {
 		// Check abort status first
 		if userAborted {
 			return nil, fmt.Errorf("execution aborted by user - no further tools will be executed")
 		}
-		
+
 		// Check auto-approve status
 		if autoApproveAll {
 			display.ShowProgress("Auto-approving tool due to 'auto-approve all' selection")
@@ -298,10 +298,10 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 			if mcpTool["name"] == name {
 				serverName := mcpTool["serverName"].(string)
 				toolName := mcpTool["toolName"].(string)
-				
+
 				// Show tool call to user
 				display.ShowToolCall(serverName, toolName, args)
-				
+
 				// In interactive mode, ask for approval (unless auto-approve is active)
 				var approved bool
 				if autoApproveAll {
@@ -325,23 +325,23 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 							return nil, err
 						}
 					}
-					
+
 					if !approved {
 						display.ShowProgress("Tool execution skipped by user")
 						return "Tool execution skipped by user", nil
 					}
 				}
-				
+
 				// Record start time
 				startTime := time.Now()
-				
+
 				// Find server ID by name and execute tool
 				servers := a.mcpManager.ListServers()
 				for _, server := range servers {
 					if server.Name == serverName {
 						result, err := a.mcpManager.CallTool(server.ID, toolName, args)
 						duration := time.Since(startTime)
-						
+
 						// Record tool call
 						record := ui.ToolCallRecord{
 							ServerName: serverName,
@@ -363,7 +363,7 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 							summary.FailedCalls++
 						}
 						summary.TotalDuration += duration
-						
+
 						return result, err
 					}
 				}
@@ -372,21 +372,21 @@ Use multiple tools as needed to provide comprehensive answers.`, message, len(mc
 		}
 		return nil, fmt.Errorf("tool %s not found", name)
 	}
-	
+
 	// If no tools available, fall back to regular call
 	if len(tools) == 0 {
 		display.ShowProgress("Processing with LLM (no tools available)...")
 		return llm.CallOpenAI(provider, enhancedMessage)
 	}
-	
+
 	display.ShowProgress("Processing with LLM and available tools...")
 	result, err := llm.CallOpenAIWithTools(provider, enhancedMessage, tools, toolCaller)
-	
+
 	// Show execution summary if tools were used
 	if summary.TotalTools > 0 {
 		display.ShowSummary(summary)
 	}
-	
+
 	return result, err
 }
 
@@ -408,28 +408,28 @@ func (a *Agent) processWithMCP(message, serverID string) (map[string]interface{}
 	if err != nil {
 		return nil, err
 	}
-	
+
 	data := map[string]interface{}{
 		"server_id":   server.ID,
 		"server_name": server.Name,
 		"status":      server.Status,
 		"processed":   true,
 	}
-	
+
 	return data, nil
 }
 
 func (a *Agent) StartServer(port string) error {
 	r := mux.NewRouter()
-	
+
 	r.HandleFunc("/api/v1/query", a.handleQuery).Methods("POST")
 	r.HandleFunc("/api/v1/health", a.handleHealth).Methods("GET")
 	r.HandleFunc("/api/v1/mcp/servers", a.handleMCPServers).Methods("GET")
 	r.HandleFunc("/api/v1/llm/providers", a.handleLLMProviders).Methods("GET")
-	
+
 	addr := ":" + port
 	log.Printf("Server starting on %s", addr)
-	
+
 	return http.ListenAndServe(addr, r)
 }
 
@@ -439,13 +439,13 @@ func (a *Agent) handleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	response, err := a.ProcessRequest(request.Message, request.MCPServerID, request.ProviderID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -455,7 +455,7 @@ func (a *Agent) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":    "healthy",
 		"timestamp": time.Now(),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(health)
 }
@@ -468,11 +468,11 @@ func (a *Agent) handleMCPServers(w http.ResponseWriter, r *http.Request) {
 
 func (a *Agent) handleLLMProviders(w http.ResponseWriter, r *http.Request) {
 	providers := a.llmManager.ListProviders()
-	
+
 	for _, provider := range providers {
 		provider.APIKey = "***"
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(providers)
 }

@@ -1,6 +1,6 @@
 # 🔨 Build Guide
 
-This document explains how to build `iteasy-ai-agent` for multiple platforms.
+This document explains how to build `syseng-agent` for multiple platforms.
 
 ## 🚀 Quick Start
 
@@ -38,22 +38,22 @@ After building, you'll find binaries in the `dist/` directory:
 ```
 dist/
 ├── windows/
-│   ├── iteasy-ai-agent-windows-amd64.exe
-│   ├── iteasy-ai-agent-windows-amd64.exe.zip
-│   ├── iteasy-ai-agent-windows-386.exe
-│   └── iteasy-ai-agent-windows-386.exe.zip
+│   ├── syseng-agent-windows-amd64.exe
+│   ├── syseng-agent-windows-amd64.exe.zip
+│   ├── syseng-agent-windows-386.exe
+│   └── syseng-agent-windows-386.exe.zip
 ├── macos/
-│   ├── iteasy-ai-agent-macos-amd64
-│   ├── iteasy-ai-agent-macos-amd64.tar.gz
-│   ├── iteasy-ai-agent-macos-arm64
-│   └── iteasy-ai-agent-macos-arm64.tar.gz
+│   ├── syseng-agent-macos-amd64
+│   ├── syseng-agent-macos-amd64.tar.gz
+│   ├── syseng-agent-macos-arm64
+│   └── syseng-agent-macos-arm64.tar.gz
 ├── linux/
-│   ├── iteasy-ai-agent-linux-amd64
-│   ├── iteasy-ai-agent-linux-amd64.tar.gz
-│   ├── iteasy-ai-agent-linux-arm64
-│   ├── iteasy-ai-agent-linux-arm64.tar.gz
-│   ├── iteasy-ai-agent-linux-386
-│   └── iteasy-ai-agent-linux-386.tar.gz
+│   ├── syseng-agent-linux-amd64
+│   ├── syseng-agent-linux-amd64.tar.gz
+│   ├── syseng-agent-linux-arm64
+│   ├── syseng-agent-linux-arm64.tar.gz
+│   ├── syseng-agent-linux-386
+│   └── syseng-agent-linux-386.tar.gz
 └── checksums.txt
 ```
 
@@ -61,13 +61,13 @@ dist/
 
 | OS | Architecture | Binary Name |
 |---|---|---|
-| Windows | amd64 | `iteasy-ai-agent-windows-amd64.exe` |
-| Windows | 386 | `iteasy-ai-agent-windows-386.exe` |
-| macOS | amd64 (Intel) | `iteasy-ai-agent-macos-amd64` |
-| macOS | arm64 (M1/M2) | `iteasy-ai-agent-macos-arm64` |
-| Linux | amd64 | `iteasy-ai-agent-linux-amd64` |
-| Linux | arm64 | `iteasy-ai-agent-linux-arm64` |
-| Linux | 386 | `iteasy-ai-agent-linux-386` |
+| Windows | amd64 | `syseng-agent-windows-amd64.exe` |
+| Windows | 386 | `syseng-agent-windows-386.exe` |
+| macOS | amd64 (Intel) | `syseng-agent-macos-amd64` |
+| macOS | arm64 (M1/M2) | `syseng-agent-macos-arm64` |
+| Linux | amd64 | `syseng-agent-linux-amd64` |
+| Linux | arm64 | `syseng-agent-linux-arm64` |
+| Linux | 386 | `syseng-agent-linux-386` |
 
 ## ⚙️ Build Options
 
@@ -98,12 +98,12 @@ dist/
 Built binaries include version information:
 
 ```bash
-./iteasy-ai-agent --version
+./syseng-agent --version
 ```
 
 Output:
 ```
-iteasy-ai-agent v1.0.0
+syseng-agent v1.0.0
 Built: 2024-01-15T10:30:00Z
 Commit: abc1234
 ```

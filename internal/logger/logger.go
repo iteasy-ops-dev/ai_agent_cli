@@ -3,21 +3,21 @@ package logger
 import (
 	"os"
 
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 	"github.com/sirupsen/logrus"
-	"github.com/yourusername/syseng-agent/pkg/types"
 )
 
 var log *logrus.Logger
 
 func Init(config *types.Config) {
 	log = logrus.New()
-	
+
 	level, err := logrus.ParseLevel(config.Logging.Level)
 	if err != nil {
 		level = logrus.InfoLevel
 	}
 	log.SetLevel(level)
-	
+
 	switch config.Logging.Format {
 	case "json":
 		log.SetFormatter(&logrus.JSONFormatter{})
@@ -26,7 +26,7 @@ func Init(config *types.Config) {
 	default:
 		log.SetFormatter(&logrus.JSONFormatter{})
 	}
-	
+
 	log.SetOutput(os.Stdout)
 }
 

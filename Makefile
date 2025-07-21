@@ -1,4 +1,4 @@
-# ItEasy AI Agent Makefile
+#  AI Agent Makefile
 # Cross-platform build automation
 
 .PHONY: help build clean test run dev install deps build-all build-windows build-macos build-linux fmt vet lint
@@ -7,7 +7,7 @@
 .DEFAULT_GOAL := help
 
 # Build configuration
-APP_NAME := iteasy-ai-agent
+APP_NAME := syseng-agent
 BUILD_DIR := dist
 VERSION ?= dev
 BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -25,7 +25,7 @@ RED := \033[31m
 NC := \033[0m
 
 help: ## Show this help message
-	@echo "$(BLUE)ItEasy AI Agent Build System$(NC)"
+	@echo "$(BLUE) AI Agent Build System$(NC)"
 	@echo ""
 	@echo "$(GREEN)Available targets:$(NC)"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)

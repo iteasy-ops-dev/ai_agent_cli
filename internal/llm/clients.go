@@ -8,21 +8,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
 type OpenAIRequest struct {
-	Model     string     `json:"model"`
-	Messages  []Message  `json:"messages"`
-	Tools     []Tool     `json:"tools,omitempty"`
+	Model      string      `json:"model"`
+	Messages   []Message   `json:"messages"`
+	Tools      []Tool      `json:"tools,omitempty"`
 	ToolChoice interface{} `json:"tool_choice,omitempty"`
 }
 
 type Message struct {
-	Role       string      `json:"role"`
-	Content    string      `json:"content,omitempty"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 type ToolCall struct {
@@ -48,7 +48,7 @@ type ToolFunction struct {
 }
 
 type OpenAIResponse struct {
-	Choices []Choice `json:"choices"`
+	Choices []Choice  `json:"choices"`
 	Error   *APIError `json:"error,omitempty"`
 }
 
@@ -79,7 +79,7 @@ type Content struct {
 
 func ConvertMCPToolsToOpenAI(mcpTools []map[string]interface{}) []Tool {
 	var tools []Tool
-	
+
 	for _, mcpTool := range mcpTools {
 		tool := Tool{
 			Type: "function",
@@ -91,7 +91,7 @@ func ConvertMCPToolsToOpenAI(mcpTools []map[string]interface{}) []Tool {
 		}
 		tools = append(tools, tool)
 	}
-	
+
 	return tools
 }
 
@@ -152,7 +152,7 @@ func CallOpenAI(provider *types.LLMProvider, message string) (string, error) {
 }
 
 // CallOpenAIWithTools는 OpenAI Function Calling과 MCP 도구를 통합한 핵심 함수입니다
-// 
+//
 // 이 함수는 사용자와 OpenAI LLM 간의 대화를 조율하며, LLM이 외부 도구(MCP 도구)를
 // 반복적으로 호출하여 정보를 수집하고 작업을 수행할 수 있게 합니다.
 //
@@ -266,7 +266,7 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 	// 🔄 반복 제한 설정
 	// 무한 루프 방지 + 복잡한 다단계 작업 허용의 균형점
 	maxIterations := 10
-	
+
 	// 🎪 메인 이벤트 루프 시작
 	// 각 반복에서: API 호출 → 응답 분석 → 도구 실행 → 다음 반복
 	for i := 0; i < maxIterations; i++ {
@@ -295,13 +295,13 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 		}
 
 		// 📋 HTTP 헤더 설정
-		req.Header.Set("Content-Type", "application/json")                    // 📝 요청 본문이 JSON임을 명시
-		req.Header.Set("Authorization", "Bearer "+provider.APIKey)            // 🔑 인증 토큰 설정
+		req.Header.Set("Content-Type", "application/json")         // 📝 요청 본문이 JSON임을 명시
+		req.Header.Set("Authorization", "Bearer "+provider.APIKey) // 🔑 인증 토큰 설정
 
 		// ⏰ HTTP 클라이언트 생성 (30초 타임아웃)
 		// 타임아웃: 요청이 너무 오래 걸리면 자동으로 취소
 		client := &http.Client{Timeout: 30 * time.Second}
-		
+
 		// 🚀 실제 API 호출 실행
 		resp, err := client.Do(req)
 		if err != nil {
@@ -312,7 +312,7 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 		// 📥 응답 구조체 준비
 		// OpenAI API 응답을 받을 Go 구조체 변수 선언
 		var openAIResp OpenAIResponse
-		
+
 		// 🔄 JSON → Go 구조체 변환
 		// resp.Body: HTTP 응답 본문 (JSON 형태)
 		// json.NewDecoder: 스트림 방식으로 JSON 파싱 (메모리 효율적)
@@ -337,7 +337,7 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 		// 🥇 최고 점수 응답 선택
 		// OpenAI는 보통 첫 번째 choice가 가장 좋은 응답
 		choice := openAIResp.Choices[0]
-		
+
 		// 📚 대화 기록 업데이트
 		// LLM의 응답을 메시지 배열에 추가하여 컨텍스트 유지
 		// 다음 턴에서 LLM이 이전 응답을 "기억"할 수 있게 됨
@@ -350,7 +350,7 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 			// 🔧 도구 실행 루프
 			// LLM이 여러 도구를 동시에 호출할 수 있으므로 반복 처리
 			for _, toolCall := range choice.Message.ToolCalls {
-				
+
 				// 📝 함수 인수 파싱
 				// LLM이 보낸 JSON 문자열을 Go map으로 변환
 				// 예: '{"path": "/home/user", "recursive": true}'
@@ -365,7 +365,7 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 				// toolCall.Function.Name: LLM이 호출하려는 함수 이름 (예: "Desktop_Commander_list_directory")
 				// args: 함수에 전달할 매개변수들
 				result, err := toolCaller(toolCall.Function.Name, args)
-				
+
 				// 🛡️ 에러 처리
 				// 도구 실행이 실패해도 전체 대화를 중단하지 않음
 				if err != nil {
@@ -373,25 +373,25 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 					// 에러 타입에 따라 구체적인 힌트 제공
 					errorMsg := err.Error()
 					hints := []string{}
-					
+
 					// 경로 관련 에러에 대한 힌트
-					if strings.Contains(errorMsg, "no such file or directory") || 
-					   strings.Contains(errorMsg, "ENOENT") {
-						hints = append(hints, 
+					if strings.Contains(errorMsg, "no such file or directory") ||
+						strings.Contains(errorMsg, "ENOENT") {
+						hints = append(hints,
 							"Try alternative paths like ~/Downloads, ~/다운로드, ~/Desktop, or use find command",
 							"Use start_process('echo $HOME') to verify home directory path",
 							"Search in parent directories or common locations")
 					}
-					
+
 					// 권한 관련 에러에 대한 힌트
-					if strings.Contains(errorMsg, "permission denied") || 
-					   strings.Contains(errorMsg, "EACCES") {
+					if strings.Contains(errorMsg, "permission denied") ||
+						strings.Contains(errorMsg, "EACCES") {
 						hints = append(hints,
 							"Try locations with read permissions",
 							"Check accessible directories with list_directory",
 							"Use alternative methods to gather information")
 					}
-					
+
 					// 명령어 관련 에러에 대한 힌트
 					if strings.Contains(errorMsg, "command not found") {
 						hints = append(hints,
@@ -399,10 +399,10 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 							"Try basic shell commands instead",
 							"Check available tools with different approaches")
 					}
-					
+
 					result = map[string]interface{}{
-						"error": errorMsg,
-						"hints": hints,
+						"error":      errorMsg,
+						"hints":      hints,
 						"suggestion": "Please try alternative approaches based on the hints provided",
 					}
 				}
@@ -410,35 +410,35 @@ Always combine multiple commands and provide comprehensive analysis. When encoun
 				// 🔄 결과 직렬화
 				// Go 객체 → JSON 문자열로 변환하여 LLM에게 전달 준비
 				resultJSON, _ := json.Marshal(result)
-				
+
 				// 🎯 응답 향상 로직
 				// 도구 결과에 추가 컨텍스트 제공으로 더 나은 응답 유도
 				toolResponse := string(resultJSON)
-				
+
 				// 빈 결과나 예상치 못한 결과에 대한 추가 지침
 				if strings.Contains(toolResponse, "[]") || strings.Contains(toolResponse, "{}") {
 					toolResponse += "\n\n[System: Empty result detected. Try alternative locations or methods.]"
 				}
-				
+
 				// 에러가 포함된 결과에 대한 추가 강조
 				if strings.Contains(toolResponse, "error") && strings.Contains(toolResponse, "ENOENT") {
 					toolResponse += "\n\n[System: Path not found. You MUST try alternative paths mentioned in the hints. Do not give up!]"
 				}
-				
+
 				if len(choice.Message.ToolCalls) == 1 && i < maxIterations-2 {
 					// 💡 단일 도구만 사용했고 아직 반복 여유가 있으면 추가 도구 사용 유도
 					toolResponse += "\n\n[System: Consider if additional tools would provide more complete information for the user's question]"
 				}
-				
+
 				// 📚 도구 결과를 대화 컨텍스트에 추가
 				// OpenAI Function Calling 프로토콜에 따른 메시지 구조
 				messages = append(messages, Message{
-					Role:       "tool",             // 🔧 "tool" 역할: 함수 실행 결과임을 OpenAI에게 알림
-					Content:    toolResponse,       // 📄 실행 결과 JSON + 추가 컨텍스트
-					ToolCallID: toolCall.ID,        // 🏷️ 어떤 함수 호출에 대한 응답인지 매칭 ID
+					Role:       "tool",       // 🔧 "tool" 역할: 함수 실행 결과임을 OpenAI에게 알림
+					Content:    toolResponse, // 📄 실행 결과 JSON + 추가 컨텍스트
+					ToolCallID: toolCall.ID,  // 🏷️ 어떤 함수 호출에 대한 응답인지 매칭 ID
 				})
 			}
-			
+
 			// 🔄 대화 계속 진행
 			// 도구 실행이 완료되었으므로 다음 반복으로 이동
 			// LLM이 도구 결과를 보고 추가 도구 호출 또는 최종 답변 결정

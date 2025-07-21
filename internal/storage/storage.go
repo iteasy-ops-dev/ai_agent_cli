@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yourusername/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
 type Storage struct {
@@ -17,9 +17,9 @@ func New(dataDir string) *Storage {
 		home, _ := os.UserHomeDir()
 		dataDir = filepath.Join(home, ".syseng-agent", "data")
 	}
-	
+
 	os.MkdirAll(dataDir, 0755)
-	
+
 	return &Storage{
 		dataDir: dataDir,
 	}
@@ -30,14 +30,14 @@ func (s *Storage) SaveLLMProviders(providers map[string]*types.LLMProvider) erro
 	if err != nil {
 		return err
 	}
-	
+
 	filePath := filepath.Join(s.dataDir, "llm_providers.json")
 	return os.WriteFile(filePath, data, 0644)
 }
 
 func (s *Storage) LoadLLMProviders() (map[string]*types.LLMProvider, error) {
 	filePath := filepath.Join(s.dataDir, "llm_providers.json")
-	
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -45,12 +45,12 @@ func (s *Storage) LoadLLMProviders() (map[string]*types.LLMProvider, error) {
 		}
 		return nil, err
 	}
-	
+
 	var providers map[string]*types.LLMProvider
 	if err := json.Unmarshal(data, &providers); err != nil {
 		return nil, err
 	}
-	
+
 	return providers, nil
 }
 
@@ -59,14 +59,14 @@ func (s *Storage) SaveMCPServers(servers map[string]*types.MCPServer) error {
 	if err != nil {
 		return err
 	}
-	
+
 	filePath := filepath.Join(s.dataDir, "mcp_servers.json")
 	return os.WriteFile(filePath, data, 0644)
 }
 
 func (s *Storage) LoadMCPServers() (map[string]*types.MCPServer, error) {
 	filePath := filepath.Join(s.dataDir, "mcp_servers.json")
-	
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -74,11 +74,11 @@ func (s *Storage) LoadMCPServers() (map[string]*types.MCPServer, error) {
 		}
 		return nil, err
 	}
-	
+
 	var servers map[string]*types.MCPServer
 	if err := json.Unmarshal(data, &servers); err != nil {
 		return nil, err
 	}
-	
+
 	return servers, nil
 }

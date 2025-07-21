@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
 type MCPProcess struct {
@@ -87,18 +87,18 @@ func (p *MCPProcess) Start() error {
 		return fmt.Errorf("invalid server URL: %s", p.server.URL)
 	}
 	p.cmd = exec.CommandContext(p.ctx, args[0], args[1:]...)
-	
+
 	var err error
 	p.stdin, err = p.cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stdin pipe: %w", err)
 	}
-	
+
 	p.stdout, err = p.cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	
+
 	p.stderr, err = p.cmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stderr pipe: %w", err)
@@ -127,11 +127,11 @@ func (p *MCPProcess) Start() error {
 
 func (p *MCPProcess) Stop() error {
 	p.cancel()
-	
+
 	if p.cmd != nil && p.cmd.Process != nil {
 		return p.cmd.Process.Kill()
 	}
-	
+
 	return nil
 }
 
@@ -262,13 +262,13 @@ func (p *MCPProcess) sendRequest(req MCPRequest) (*MCPResponse, error) {
 		p.nextID++
 		p.mu.Unlock()
 	}
-	
+
 	// Create response channel
 	respCh := make(chan *MCPResponse, 1)
 	p.mu.Lock()
 	p.responses[req.ID] = respCh
 	p.mu.Unlock()
-	
+
 	// Marshal and send request
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -279,7 +279,7 @@ func (p *MCPProcess) sendRequest(req MCPRequest) (*MCPResponse, error) {
 	}
 
 	data = append(data, '\n')
-	
+
 	if _, err := p.stdin.Write(data); err != nil {
 		p.mu.Lock()
 		delete(p.responses, req.ID)
@@ -308,7 +308,7 @@ func (p *MCPProcess) sendNotification(req MCPRequest) error {
 	}
 
 	data = append(data, '\n')
-	
+
 	if _, err := p.stdin.Write(data); err != nil {
 		return fmt.Errorf("failed to write notification: %w", err)
 	}
@@ -323,7 +323,7 @@ func (p *MCPProcess) readOutput() {
 		if line == "" {
 			continue
 		}
-		
+
 		// Parse JSON-RPC responses
 		var resp MCPResponse
 		if err := json.Unmarshal([]byte(line), &resp); err == nil {
@@ -349,19 +349,19 @@ func (p *MCPProcess) readErrors() {
 	scanner := bufio.NewScanner(p.stderr)
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		// Filter out normal loading messages from desktop-commander
 		if strings.Contains(line, "Loading server.ts") ||
-		   strings.Contains(line, "Setting up request handlers") ||
-		   strings.Contains(line, "initialized") ||
-		   strings.Contains(line, "Loading configuration") ||
-		   strings.Contains(line, "Configuration loaded") ||
-		   strings.Contains(line, "Connecting server") ||
-		   strings.Contains(line, "Server connected") ||
-		   strings.Contains(line, "Generating tools list") {
+			strings.Contains(line, "Setting up request handlers") ||
+			strings.Contains(line, "initialized") ||
+			strings.Contains(line, "Loading configuration") ||
+			strings.Contains(line, "Configuration loaded") ||
+			strings.Contains(line, "Connecting server") ||
+			strings.Contains(line, "Server connected") ||
+			strings.Contains(line, "Generating tools list") {
 			continue // Skip normal loading messages
 		}
-		
+
 		// Only show actual errors
 		fmt.Printf("MCP Error: %s\n", line)
 	}

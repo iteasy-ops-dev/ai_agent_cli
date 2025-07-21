@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Build configuration
-APP_NAME="iteasy-ai-agent"
+APP_NAME="syseng-agent"
 BUILD_DIR="dist"
 VERSION=${VERSION:-"dev"}
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -25,7 +25,7 @@ PLATFORMS="windows/amd64:windows-amd64.exe windows/386:windows-386.exe darwin/am
 print_header() {
     echo -e "${BLUE}"
     echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║                ItEasy AI Agent Build Script                 ║"
+    echo "║                 AI Agent Build Script                 ║"
     echo "║                   Cross-Platform Builder                    ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"

@@ -1,4 +1,4 @@
-module github.com/yourusername/syseng-agent
+module github.com/iteasy-ops-dev/syseng-agent
 
 go 1.21
 

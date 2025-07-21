@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: ItEasy AI Agent Cross-Platform Build Script for Windows
+::  AI Agent Cross-Platform Build Script for Windows
 :: Supports: Windows, macOS, Linux for multiple architectures
 
 :: Build configuration
-set APP_NAME=iteasy-ai-agent
+set APP_NAME=syseng-agent
 set BUILD_DIR=dist
 if "%VERSION%"=="" set VERSION=dev
 for /f "delims=" %%i in ('powershell -command "Get-Date -UFormat '%%Y-%%m-%%dT%%H:%%M:%%SZ'"') do set BUILD_TIME=%%i
@@ -29,7 +29,7 @@ goto main
 :print_header
 echo.
 echo ================================================================
-echo                ItEasy AI Agent Build Script
+echo                 AI Agent Build Script
 echo                   Cross-Platform Builder
 echo ================================================================
 echo.
