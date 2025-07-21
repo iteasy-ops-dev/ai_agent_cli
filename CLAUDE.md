@@ -9,6 +9,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the application
 go build -o syseng-agent .
 
+# Cross-platform builds
+./build.sh                 # Build for all platforms (Unix/macOS)
+build.bat                  # Build for all platforms (Windows)
+make build-all             # Build for all platforms using Makefile
+
+# Platform-specific builds
+make build-windows         # Windows (amd64, 386)
+make build-macos           # macOS (Intel, Apple Silicon)
+make build-linux           # Linux (amd64, arm64, 386)
+
+# Development builds
+make build                 # Current platform only
+make dev                   # Build and run
+
+# Clean builds
+make clean
+./build.sh clean
+
 # Run tests
 go test ./...
 
@@ -44,8 +62,9 @@ go mod tidy && go build -o syseng-agent .
 **Interactive Mode** (`-i` or `--interactive`):
 - User approval required for each tool execution
 - Real-time tool call display with parameters
-- Options: [y]es, [n]o, [s]kip all, [a]bort
+- Options: [y]es, [n]o, [s]kip prompts (auto-approve all), [a]bort
 - Prevents unwanted system modifications
+- 's' option changed from "skip all" to "auto-approve all remaining tools"
 
 **Visual Enhancements**:
 - 🔧 Color-coded tool calls (blue)
@@ -190,6 +209,57 @@ display.ShowSummary(executionSummary)
 - `manager.go:testStdioServer()` - MCP server validation and tool caching
 - `protocol.go:MCPProcess` - JSON-RPC communication handling
 
+## Build System
+
+### Cross-Platform Support
+The project includes comprehensive build scripts for multiple platforms:
+
+**Supported Platforms:**
+- Windows: amd64, 386
+- macOS: amd64 (Intel), arm64 (Apple Silicon)
+- Linux: amd64, arm64, 386
+
+**Build Output Structure:**
+```
+dist/
+├── windows/
+│   ├── syseng-agent-windows-amd64.exe
+│   ├── syseng-agent-windows-amd64.exe.zip
+│   └── syseng-agent-windows-386.exe
+├── macos/
+│   ├── syseng-agent-macos-amd64
+│   ├── syseng-agent-macos-amd64.tar.gz
+│   └── syseng-agent-macos-arm64
+├── linux/
+│   ├── syseng-agent-linux-amd64
+│   ├── syseng-agent-linux-amd64.tar.gz
+│   └── syseng-agent-linux-arm64
+└── checksums.txt
+```
+
+**Build Features:**
+- Automatic archive creation (ZIP for Windows, tar.gz for Unix)
+- SHA256 checksum generation
+- Version injection with build time and git commit
+- Colored output and progress indicators
+- Clean build directory management
+
+**Version Information:**
+```bash
+./syseng-agent --version
+# Output:
+# syseng-agent v1.0.0
+# Built: 2024-01-15T10:30:00Z
+# Commit: abc1234
+```
+
+### Error Handling Improvements
+Enhanced LLM prompt engineering for better error recovery:
+- System prompt includes fallback strategies
+- Common error hints provided to LLM
+- Alternative path suggestions for file operations
+- Never give up after single failure approach
+
 ## Configuration
 
 Default config location: `config.yaml`
@@ -202,3 +272,10 @@ logging:
 ```
 
 **Environment**: Go 1.21+, requires network access for LLM APIs and MCP server downloads.
+
+**Build Prerequisites:**
+- Go 1.21+
+- Git (for commit information)
+- tar (Unix/Linux for archives)
+- PowerShell (Windows for ZIP creation)
+- make (optional, for Makefile usage)
