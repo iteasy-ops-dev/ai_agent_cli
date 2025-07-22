@@ -89,21 +89,26 @@ func (s *SpinnerDisplay) PromptToolApproval(serverName, toolName string, argumen
 
 // Enhanced progress display with time tracking
 type TimedProgressDisplay struct {
-	base      ToolDisplayInterface
-	startTime time.Time
+	base            ToolDisplayInterface
+	sessionStartTime time.Time
+	lastEventTime   time.Time
 }
 
 // NewTimedProgressDisplay creates a display that tracks operation timing
 func NewTimedProgressDisplay(base ToolDisplayInterface) *TimedProgressDisplay {
+	now := time.Now()
 	return &TimedProgressDisplay{
-		base:      base,
-		startTime: time.Now(),
+		base:             base,
+		sessionStartTime: now,
+		lastEventTime:    now,
 	}
 }
 
 // ShowToolCall displays a tool call with timing
 func (t *TimedProgressDisplay) ShowToolCall(serverName, toolName string, arguments map[string]interface{}) error {
-	elapsed := time.Since(t.startTime)
+	now := time.Now()
+	elapsed := now.Sub(t.lastEventTime)
+	t.lastEventTime = now
 	fmt.Printf("⏱️  %s ", ColorGray(fmt.Sprintf("[+%.1fs]", elapsed.Seconds())))
 	return t.base.ShowToolCall(serverName, toolName, arguments)
 }
@@ -115,14 +120,18 @@ func (t *TimedProgressDisplay) ShowToolResult(result interface{}, duration time.
 
 // ShowError displays error with timing
 func (t *TimedProgressDisplay) ShowError(err error) error {
-	elapsed := time.Since(t.startTime)
+	now := time.Now()
+	elapsed := now.Sub(t.lastEventTime)
+	t.lastEventTime = now
 	fmt.Printf("⏱️  %s ", ColorGray(fmt.Sprintf("[+%.1fs]", elapsed.Seconds())))
 	return t.base.ShowError(err)
 }
 
 // ShowProgress displays progress with timing
 func (t *TimedProgressDisplay) ShowProgress(message string) error {
-	elapsed := time.Since(t.startTime)
+	now := time.Now()
+	elapsed := now.Sub(t.lastEventTime)
+	t.lastEventTime = now
 	
 	// For spinner-worthy messages, don't add timing immediately - let spinner handle it
 	shouldSpin := strings.Contains(message, "Processing") || 
@@ -147,7 +156,7 @@ func (t *TimedProgressDisplay) ShowProgress(message string) error {
 
 // ShowSummary displays summary with total time
 func (t *TimedProgressDisplay) ShowSummary(summary ExecutionSummary) error {
-	totalElapsed := time.Since(t.startTime)
+	totalElapsed := time.Since(t.sessionStartTime)
 	fmt.Printf("\n⏱️  %s Total session time: %s\n", 
 		ColorGray("Session:"), 
 		ColorWhite(totalElapsed.String()))
@@ -156,7 +165,9 @@ func (t *TimedProgressDisplay) ShowSummary(summary ExecutionSummary) error {
 
 // PromptToolApproval prompts with timing context
 func (t *TimedProgressDisplay) PromptToolApproval(serverName, toolName string, arguments map[string]interface{}) (bool, error) {
-	elapsed := time.Since(t.startTime)
+	now := time.Now()
+	elapsed := now.Sub(t.lastEventTime)
+	t.lastEventTime = now
 	fmt.Printf("⏱️  %s ", ColorGray(fmt.Sprintf("[+%.1fs]", elapsed.Seconds())))
 	return t.base.PromptToolApproval(serverName, toolName, arguments)
 }

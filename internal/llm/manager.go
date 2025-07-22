@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -203,11 +204,38 @@ func (m *Manager) validateProvider(provider *types.LLMProvider) error {
 		return fmt.Errorf("API key is required for provider type %s", provider.Type)
 	}
 
-	if provider.Endpoint == "" && provider.Type == "local" {
-		return fmt.Errorf("endpoint is required for local provider")
+	if provider.Type == "local" {
+		if provider.Endpoint == "" {
+			return fmt.Errorf("endpoint is required for local provider")
+		}
+		
+		// Auto-correct common Ollama endpoint configurations
+		provider.Endpoint = m.normalizeLocalEndpoint(provider.Endpoint)
 	}
 
 	return nil
+}
+
+// normalizeLocalEndpoint auto-corrects common Ollama endpoint issues
+func (m *Manager) normalizeLocalEndpoint(endpoint string) string {
+	// Remove trailing slash
+	endpoint = strings.TrimSuffix(endpoint, "/")
+	
+	// Auto-detect and fix common Ollama configurations
+	if strings.Contains(endpoint, ":11434") {
+		// This looks like an Ollama endpoint
+		if !strings.HasSuffix(endpoint, "/api/chat") {
+			// Add the correct Ollama chat endpoint path
+			fmt.Printf("Info: Auto-correcting Ollama endpoint from '%s' to '%s/api/chat'\n", endpoint, endpoint)
+			endpoint = endpoint + "/api/chat"
+		}
+	} else if strings.Contains(endpoint, "ollama") && !strings.Contains(endpoint, "/api/chat") {
+		// Generic ollama endpoint without the chat path
+		fmt.Printf("Info: Adding /api/chat to Ollama endpoint: %s\n", endpoint)
+		endpoint = endpoint + "/api/chat"
+	}
+	
+	return endpoint
 }
 
 func (m *Manager) Shutdown() {

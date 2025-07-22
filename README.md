@@ -176,6 +176,75 @@ agent:
 - **SSE**: Server-Sent Events over HTTP
 - **HTTP**: Standard HTTP requests
 
+## Architecture Overview
+
+The SysEng Agent is built using modern software design patterns to ensure extensibility, maintainability, and clean separation of concerns.
+
+### Core Design Patterns
+
+- **Strategy Pattern**: LLM processors implement different strategies for processing messages based on provider capabilities
+- **Factory Pattern**: Client factory creates appropriate LLM clients based on provider type
+- **Interface Segregation**: Modular interfaces for different capabilities (ToolSupport, ConversationSupport)
+- **Dependency Injection**: Centralized prompt management and configuration
+
+### LLM Processing Architecture
+
+The system uses a layered architecture for processing LLM requests:
+
+```
+User Query → Agent → LLMProcessor → LLMClient → Provider API
+                ↓
+            MCP Tools ← Tool Execution ← Tool Calling
+```
+
+**Key Components:**
+
+1. **LLMProcessor Interface**: Defines processing strategies for different LLM providers
+   - `OpenAIProcessor`: Full function calling and conversation support
+   - `AnthropicProcessor`: Tool support through prompt engineering
+   - `LocalProcessor`: OpenAI-compatible local model support
+
+2. **LLMClient Interface Hierarchy**:
+   ```go
+   LLMClient (base interface)
+   ├── ToolSupport (function calling capabilities)
+   └── ConversationSupport (multi-turn conversations)
+   ```
+
+3. **ClientFactory**: Creates appropriate clients based on provider configuration
+4. **PromptManager**: Centralized prompt templates for different providers
+
+### Prompt Management System
+
+The system includes a centralized prompt management system that:
+- Provides provider-specific prompt templates
+- Supports customizable system prompts
+- Includes fallback strategies for error handling
+- Manages conversation context appropriately per provider
+
+### MCP Integration Improvements
+
+**STDIO Server Health Checks**: Fixed critical issue where MCP servers became "unhealthy" after tool use:
+- Stdio servers now skip health checks (no persistent connection needed)
+- Successful tool calls update server health timestamps
+- Transport-aware health check strategies
+
+**Tool Discovery and Caching**: 
+- Tools are discovered once at server registration and cached
+- Stored in both `server.Capabilities` (names) and `server.Tools` (full schema)
+- Prevents repeated process spawning for tool discovery
+
+### Code Quality Improvements
+
+**Utility Extraction**: Common functions consolidated in `pkg/utils/`:
+- `GetString()` and `GetMap()` functions for safe map access
+- Eliminates code duplication across the codebase
+
+**Obsolete Function Removal**: Cleaned up redundant processing functions:
+- Removed `Call*WithTools` functions in favor of interface-based approach
+- Simplified agent processing flow
+- Eliminated duplicate conversation processing logic
+
 ## Development
 
 ### Building
@@ -195,12 +264,52 @@ go test ./...
 The project is structured as follows:
 
 - `cmd/`: CLI commands
-- `internal/agent/`: Agent logic
+- `internal/agent/`: Agent orchestration logic
 - `internal/mcp/`: MCP server management
-- `internal/llm/`: LLM provider management
+- `internal/llm/`: LLM provider management with interface-based design
 - `internal/config/`: Configuration management
 - `internal/logger/`: Logging utilities
 - `pkg/types/`: Shared types
+- `pkg/utils/`: Common utility functions
+
+### Extending LLM Support
+
+To add a new LLM provider:
+
+1. **Create Client Implementation**:
+   ```go
+   type NewProviderClient struct {
+       provider *types.LLMProvider
+       // provider-specific fields
+   }
+   
+   func (c *NewProviderClient) ProcessMessage(message string) (string, error) {
+       // Implement basic message processing
+   }
+   ```
+
+2. **Implement Optional Interfaces**:
+   ```go
+   func (c *NewProviderClient) ProcessWithTools(message string, tools []Tool, toolCaller ToolCaller) (string, error) {
+       // Implement tool calling if supported
+   }
+   ```
+
+3. **Create Processor**:
+   ```go
+   type NewProviderProcessor struct {
+       *BaseProcessor
+       client LLMClient
+   }
+   ```
+
+4. **Update Factory**:
+   ```go
+   case "newprovider":
+       return NewNewProviderClient(provider), nil
+   ```
+
+The interface-based design ensures that each provider only implements the capabilities it supports, with automatic fallbacks for unsupported features.
 
 ## Additional Requirements Validation
 

@@ -20,11 +20,11 @@ type ToolDisplayInterface interface {
 
 // ExecutionSummary contains statistics about tool execution
 type ExecutionSummary struct {
-	TotalTools     int
+	TotalTools      int
 	SuccessfulCalls int
-	FailedCalls    int
-	TotalDuration  time.Duration
-	ToolCalls      []ToolCallRecord
+	FailedCalls     int
+	TotalDuration   time.Duration
+	ToolCalls       []ToolCallRecord
 }
 
 // ToolCallRecord tracks individual tool call details
@@ -58,8 +58,8 @@ func NewInteractiveDisplay() *InteractiveDisplay {
 
 // ShowToolCall displays a tool call without interaction
 func (d *NonInteractiveDisplay) ShowToolCall(serverName, toolName string, arguments map[string]interface{}) error {
-	fmt.Printf("🔧 %s Calling tool: %s%s\n", 
-		ColorBlue("Tool Call"), 
+	fmt.Printf("🔧 %s Calling tool: %s%s\n",
+		ColorBlue("Tool Call"),
 		ColorCyan(fmt.Sprintf("%s.%s", serverName, toolName)),
 		ColorGray(formatArguments(arguments)))
 	return nil
@@ -67,16 +67,16 @@ func (d *NonInteractiveDisplay) ShowToolCall(serverName, toolName string, argume
 
 // ShowToolResult displays the result of a tool call
 func (d *NonInteractiveDisplay) ShowToolResult(result interface{}, duration time.Duration) error {
-	fmt.Printf("✅ %s %s\n", 
-		ColorGreen("Success"), 
+	fmt.Printf("✅ %s %s\n",
+		ColorGreen("Success"),
 		ColorGray(fmt.Sprintf("(%.2fs)", duration.Seconds())))
-	
+
 	// Show abbreviated result
-	resultStr := fmt.Sprintf("%v", result)
-	if len(resultStr) > 200 {
-		resultStr = resultStr[:200] + "..."
-	}
-	fmt.Printf("   %s\n", ColorWhite(resultStr))
+	// resultStr := fmt.Sprintf("%v", result)
+	// if len(resultStr) > 200 {
+	// 	resultStr = resultStr[:200] + "..."
+	// }
+	// fmt.Printf("   %s\n", ColorWhite(resultStr))
 	return nil
 }
 
@@ -96,11 +96,11 @@ func (d *NonInteractiveDisplay) ShowProgress(message string) error {
 func (d *NonInteractiveDisplay) ShowSummary(summary ExecutionSummary) error {
 	fmt.Println(ColorCyan("\n📊 Execution Summary"))
 	fmt.Printf("   Total tools called: %d\n", summary.TotalTools)
-	fmt.Printf("   Successful: %s, Failed: %s\n", 
+	fmt.Printf("   Successful: %s, Failed: %s\n",
 		ColorGreen(fmt.Sprintf("%d", summary.SuccessfulCalls)),
 		ColorRed(fmt.Sprintf("%d", summary.FailedCalls)))
 	fmt.Printf("   Total duration: %s\n", ColorWhite(summary.TotalDuration.String()))
-	
+
 	if len(summary.ToolCalls) > 0 {
 		fmt.Println(ColorGray("   Tool execution order:"))
 		for i, call := range summary.ToolCalls {
@@ -108,7 +108,7 @@ func (d *NonInteractiveDisplay) ShowSummary(summary ExecutionSummary) error {
 			if !call.Success {
 				status = "❌"
 			}
-			fmt.Printf("     %d. %s %s.%s (%.2fs)\n", 
+			fmt.Printf("     %d. %s %s.%s (%.2fs)\n",
 				i+1, status, call.ServerName, call.ToolName, call.Duration.Seconds())
 		}
 	}
@@ -122,8 +122,8 @@ func (d *NonInteractiveDisplay) PromptToolApproval(serverName, toolName string, 
 
 // ShowToolCall displays a tool call and prompts for approval in interactive mode
 func (d *InteractiveDisplay) ShowToolCall(serverName, toolName string, arguments map[string]interface{}) error {
-	fmt.Printf("🔧 %s: %s%s\n", 
-		ColorBlue("Proposed Tool Call"), 
+	fmt.Printf("🔧 %s: %s%s\n",
+		ColorBlue("Proposed Tool Call"),
 		ColorCyan(fmt.Sprintf("%s.%s", serverName, toolName)),
 		ColorGray(formatArguments(arguments)))
 	return nil
@@ -162,15 +162,15 @@ func (d *InteractiveDisplay) PromptToolApproval(serverName, toolName string, arg
 	fmt.Printf("  %s - Auto-approve all remaining tools\n", ColorGreen("[s]kip prompts"))
 	fmt.Printf("  %s - Abort entire session\n", ColorRed("[a]bort"))
 	fmt.Printf("\n%s ", ColorBold("Your choice:"))
-	
+
 	// Ensure output is flushed before reading input
 	os.Stdout.Sync()
-	
+
 	response, err := d.reader.ReadString('\n')
 	if err != nil {
 		return false, fmt.Errorf("failed to read user input: %w", err)
 	}
-	
+
 	response = strings.TrimSpace(strings.ToLower(response))
 	switch response {
 	case "y", "yes", "":
@@ -196,7 +196,7 @@ func formatArguments(arguments map[string]interface{}) string {
 	if len(arguments) == 0 {
 		return ""
 	}
-	
+
 	var parts []string
 	for key, value := range arguments {
 		valueStr := fmt.Sprintf("%v", value)
@@ -205,6 +205,6 @@ func formatArguments(arguments map[string]interface{}) string {
 		}
 		parts = append(parts, fmt.Sprintf("%s=%s", key, valueStr))
 	}
-	
+
 	return fmt.Sprintf(" (%s)", strings.Join(parts, ", "))
 }

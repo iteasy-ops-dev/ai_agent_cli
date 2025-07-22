@@ -135,22 +135,33 @@ func (m *Manager) ListServers() []*types.MCPServer {
 }
 
 func (m *Manager) UpdateServerStatus(id, status string) error {
-	debugPrint("UpdateServerStatus called for %s with status %s\n", id, status)
+	debugPrint("UpdateServerStatus: Called for server %s with status %s\n", id, status)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	server, exists := m.servers[id]
 	if !exists {
-		debugPrint("Server %s not found in UpdateServerStatus\n", id)
+		debugPrint("UpdateServerStatus: Server %s not found\n", id)
 		return fmt.Errorf("server %s not found", id)
 	}
 
-	debugPrint("Updating server %s status from %s to %s\n", server.Name, server.Status, status)
+	oldStatus := server.Status
+	debugPrint("UpdateServerStatus: Changing server %s status from %s to %s\n", server.Name, oldStatus, status)
+
 	server.Status = status
 	server.UpdatedAt = time.Now()
-	server.LastPing = time.Now()
 
-	debugPrint("Server %s status updated successfully\n", server.Name)
+	// Only update LastPing for non-unhealthy status changes
+	// This prevents unhealthy status from resetting the LastPing timer
+	if status != "unhealthy" {
+		server.LastPing = time.Now()
+		debugPrint("UpdateServerStatus: LastPing updated for server %s (status: %s)\n", server.Name, status)
+	} else {
+		debugPrint("UpdateServerStatus: LastPing NOT updated for server %s (marked unhealthy)\n", server.Name)
+	}
+
+	debugPrint("UpdateServerStatus: Server %s status successfully changed from %s to %s\n",
+		server.Name, oldStatus, status)
 	return nil
 }
 
@@ -173,14 +184,9 @@ func (m *Manager) testStdioServer(server *types.MCPServer) {
 
 	var process MCPProcessInterface
 
-	// Use mock for testing or specific commands
-	if server.URL == "echo" || server.URL == "mock" {
-		debugPrint("Creating MockMCPProcess for %s\n", server.Name)
-		process = NewMockMCPProcess(server)
-	} else {
-		debugPrint("Creating MCPProcess for %s\n", server.Name)
-		process = NewMCPProcess(server)
-	}
+	// Create MCP process (mock functionality temporarily disabled)
+	debugPrint("Creating MCPProcess for %s\n", server.Name)
+	process = NewMCPProcess(server)
 
 	// Test if we can start the process and discover tools
 	debugPrint("Starting process for %s\n", server.Name)
@@ -281,8 +287,36 @@ func (m *Manager) performHealthChecks() {
 }
 
 func (m *Manager) healthCheck(server *types.MCPServer) {
-	if time.Since(server.LastPing) > 60*time.Second {
-		m.UpdateServerStatus(server.ID, "unhealthy")
+	timeSinceLastPing := time.Since(server.LastPing)
+	debugPrint("HealthCheck: Server %s (transport: %s) - LastPing: %v ago\n",
+		server.Name, server.Transport, timeSinceLastPing)
+
+	// Different health check strategies based on transport type
+	switch server.Transport {
+	case "stdio":
+		// stdio servers start fresh processes for each tool call and don't maintain persistent connections
+		// Therefore, health checks are meaningless - if initialization succeeded and tools can be called,
+		// the server should remain available
+		debugPrint("HealthCheck: Skipping stdio server %s (no persistent connection, health check not applicable)\n", server.Name)
+		return
+	case "sse", "http":
+		// For persistent connections, use shorter timeout but add connection test
+		if timeSinceLastPing > 60*time.Second {
+			debugPrint("HealthCheck: Persistent server %s may be unhealthy (no ping for %v)\n",
+				server.Name, timeSinceLastPing)
+			// TODO: Add actual connection test for persistent servers
+			// For now, mark as unhealthy after 60 seconds
+			m.UpdateServerStatus(server.ID, "unhealthy")
+		} else {
+			debugPrint("HealthCheck: Persistent server %s is healthy (last ping: %v ago)\n",
+				server.Name, timeSinceLastPing)
+		}
+	default:
+		// Unknown transport, use conservative approach
+		if timeSinceLastPing > 2*time.Minute {
+			debugPrint("HealthCheck: Unknown transport server %s marked unhealthy\n", server.Name)
+			m.UpdateServerStatus(server.ID, "unhealthy")
+		}
 	}
 }
 
@@ -309,6 +343,11 @@ func (m *Manager) CallTool(serverID, toolName string, arguments map[string]inter
 		return nil, fmt.Errorf("MCP server %s not found", serverID)
 	}
 
+	debugPrint("CallTool: Executing %s on server %s (transport: %s)\n", toolName, server.Name, server.Transport)
+
+	var result interface{}
+	var err error
+
 	// For stdio servers, we might need to start a fresh process for each call
 	if server.Transport == "stdio" {
 		// For Mock servers, use the existing process
@@ -316,27 +355,44 @@ func (m *Manager) CallTool(serverID, toolName string, arguments map[string]inter
 			if !processExists {
 				return nil, fmt.Errorf("MCP server %s not available", serverID)
 			}
-			return process.CallTool(toolName, arguments)
+			result, err = process.CallTool(toolName, arguments)
+		} else {
+			// For real stdio servers, start a fresh process
+			var freshProcess MCPProcessInterface
+			freshProcess = NewMCPProcess(server)
+
+			if startErr := freshProcess.Start(); startErr != nil {
+				debugPrint("CallTool: Failed to start fresh process for %s: %v\n", server.Name, startErr)
+				return nil, fmt.Errorf("failed to start MCP process: %w", startErr)
+			}
+			defer freshProcess.Stop()
+
+			result, err = freshProcess.CallTool(toolName, arguments)
+		}
+	} else {
+		// For other transports (SSE, HTTP), use persistent connection
+		if !processExists {
+			return nil, fmt.Errorf("MCP server %s not connected", serverID)
 		}
 
-		// For real stdio servers, start a fresh process
-		var freshProcess MCPProcessInterface
-		freshProcess = NewMCPProcess(server)
+		result, err = process.CallTool(toolName, arguments)
+	}
 
-		if err := freshProcess.Start(); err != nil {
-			return nil, fmt.Errorf("failed to start MCP process: %w", err)
+	// Update LastPing on successful tool execution to keep server healthy
+	if err == nil {
+		debugPrint("CallTool: Tool execution successful, updating LastPing for server %s\n", server.Name)
+		m.mu.Lock()
+		if currentServer, exists := m.servers[serverID]; exists {
+			currentServer.LastPing = time.Now()
+			currentServer.UpdatedAt = time.Now()
+			debugPrint("CallTool: LastPing updated for server %s\n", server.Name)
 		}
-		defer freshProcess.Stop()
-
-		return freshProcess.CallTool(toolName, arguments)
+		m.mu.Unlock()
+	} else {
+		debugPrint("CallTool: Tool execution failed for server %s: %v\n", server.Name, err)
 	}
 
-	// For other transports (SSE, HTTP), use persistent connection
-	if !processExists {
-		return nil, fmt.Errorf("MCP server %s not connected", serverID)
-	}
-
-	return process.CallTool(toolName, arguments)
+	return result, err
 }
 
 // GetServerTools returns available tools for a server
@@ -378,6 +434,13 @@ func (m *Manager) GetAllTools() map[string][]Tool {
 
 	allTools := make(map[string][]Tool)
 
+	// Debug: Log server count and status
+	debugPrint("GetAllTools: Found %d total servers\n", len(m.servers))
+	for serverID, server := range m.servers {
+		debugPrint("Server %s (%s): Status=%s, Transport=%s, Tools=%d\n",
+			server.Name, serverID, server.Status, server.Transport, len(server.Tools))
+	}
+
 	// Include all available servers
 	for serverID, server := range m.servers {
 		if server.Status == "available" || server.Status == "connected" {
@@ -392,10 +455,16 @@ func (m *Manager) GetAllTools() map[string][]Tool {
 					})
 				}
 				allTools[server.Name] = tools
+				debugPrint("GetAllTools: Added %d tools from stdio server %s (status: %s)\n", 
+					len(tools), server.Name, server.Status)
 			} else if process, exists := m.processes[serverID]; exists {
 				// For other servers, use process
 				allTools[server.Name] = process.GetTools()
 			}
+		} else {
+			// Log servers that are not available
+			debugPrint("GetAllTools: Skipping server %s (status: %s, transport: %s)\n", 
+				server.Name, server.Status, server.Transport)
 		}
 	}
 

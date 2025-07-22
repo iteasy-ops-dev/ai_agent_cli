@@ -52,12 +52,47 @@ go mod tidy && go build -o syseng-agent .
 # Test agent with interactive mode (NEW! User can approve each tool)
 ./syseng-agent agent query -i "check system information"
 
+# NEW: Interactive chat session (basic mode)
+./syseng-agent chat
+
+# NEW: Interactive chat with TUI interface (enhanced mode)
+./syseng-agent chat --tui
+
+# Interactive chat with tool approval
+./syseng-agent chat -i --tui
+
+# Debug mode (shows detailed MCP server health and tool loading info)
+DEBUG=1 ./syseng-agent chat
+DEBUG=1 ./syseng-agent agent query "test message"
+
 # List current resources
 ./syseng-agent mcp list
 ./syseng-agent llm list
 ```
 
-### New UI Features (Enhanced User Interface)
+### New Chat Features (Interactive Conversation Mode)
+
+**Chat Commands**:
+- `./syseng-agent chat` - Basic chat mode with readline interface
+- `./syseng-agent chat --tui` - Enhanced TUI mode with Bubble Tea
+- `./syseng-agent chat -i` - Chat with interactive tool approval
+- `./syseng-agent chat --tui -i` - Full-featured TUI with tool approval
+
+**TUI Chat Interface** (Terminal User Interface):
+- 📝 Multi-line textarea for composing messages
+- 📜 Scrollable conversation history viewport
+- 🎨 Syntax-highlighted tool calls and results
+- ⌨️ Keyboard shortcuts: Ctrl+Enter (send), Ctrl+L (clear), Esc (quit)
+- 🔧 Real-time tool execution display
+- 📊 Execution summaries with timing information
+
+**Basic Chat Mode**:
+- Simple readline-based conversation loop
+- Multi-line input support with `\n` escape sequences
+- Built-in commands: help, clear, exit, quit
+- Maintains conversation context within session
+
+### Enhanced UI Features (Tool Execution Display)
 
 **Interactive Mode** (`-i` or `--interactive`):
 - User approval required for each tool execution
@@ -94,34 +129,90 @@ go mod tidy && go build -o syseng-agent .
 
 ## Core Architecture
 
-### LLM-MCP Integration Flow
-The heart of this system is the **OpenAI Function Calling ↔ MCP Tools** integration:
+### New Interface-Based Design (Refactored Architecture)
 
-1. **User Query** → `internal/agent/agent.go`
-2. **Tool Discovery** → `internal/mcp/manager.go:GetAllTools()`
-3. **Function Conversion** → `internal/llm/clients.go:ConvertMCPToolsToOpenAI()`
-4. **Iterative LLM Calls** → `internal/llm/clients.go:CallOpenAIWithTools()`
-5. **Tool Execution** → `internal/mcp/manager.go:CallTool()`
+The system has been completely refactored using modern design patterns for better extensibility and maintainability:
 
-### Key Components
+**Design Patterns Implementation:**
+- **Strategy Pattern**: `LLMProcessor` interface with provider-specific implementations
+- **Factory Pattern**: `ClientFactory` creates appropriate clients based on provider type
+- **Interface Segregation**: Modular capabilities through `ToolSupport` and `ConversationSupport`
+- **Template Method**: `BaseProcessor` provides common functionality for all processors
 
-**CallOpenAIWithTools Function** (`internal/llm/clients.go`)
-- Implements the conversation loop between LLM and MCP tools
-- Manages message context across multiple tool calls
-- Handles up to 10 iterations for complex multi-tool workflows
-- Core pattern: API call → tool detection → tool execution → continue loop
+### LLM Processing Flow (New Architecture)
 
-**MCP Manager** (`internal/mcp/manager.go`)
-- **stdio servers**: Start fresh process per tool call, store tool metadata
-- **SSE/HTTP servers**: Maintain persistent connections
-- **Tool discovery**: Happens once at server registration, cached in `server.Tools`
-- **Process storage**: Uses mutex-free approach for stdio to avoid deadlocks
+```
+User Query → Agent → LLMProcessor → LLMClient → Provider API
+                ↓
+            MCP Tools ← Tool Execution ← Tool Calling
+```
 
-**Agent Orchestrator** (`internal/agent/agent.go`)
-- Combines LLM providers with MCP tools
-- Enhances user messages with tool availability context
-- Handles tool name cleaning for OpenAI compatibility (spaces → underscores)
-- **NEW**: `ProcessRequestWithUI()` method for enhanced user experience
+**Interface Hierarchy:**
+```go
+LLMClient (base interface)
+├── ProcessMessage(message string) (string, error)
+├── GetProviderInfo() ProviderInfo
+└── IsHealthy() bool
+
+ToolSupport (extends LLMClient)
+├── ProcessWithTools(message, tools, toolCaller) (string, error)
+└── SupportsFunctionCalling() bool
+
+ConversationSupport (extends LLMClient)
+├── ProcessConversation(session) (string, error)
+├── ProcessConversationWithTools(session, tools, toolCaller) (string, error)
+└── SupportsConversation() bool
+```
+
+### Key Components (Refactored)
+
+**LLMProcessor Interface** (`internal/llm/processor.go`)
+- Defines processing strategies for different LLM providers
+- Implements Strategy Pattern for provider-specific behavior
+- Methods: `ProcessWithTools()`, `ProcessConversation()`, `ProcessWithUI()`, `ProcessConversationWithUI()`
+
+**LLMClient Implementations**:
+- **OpenAIClient** (`internal/llm/openai_client.go`): Full ToolSupport and ConversationSupport
+- **AnthropicClient** (`internal/llm/anthropic_client.go`): Basic tool support via prompt engineering  
+- **LocalClient** (`internal/llm/local_client.go`): OpenAI-compatible local models
+
+**ClientFactory** (`internal/llm/client_factory.go`)
+- Creates appropriate clients based on provider configuration
+- Includes caching and validation functionality
+- Supports extensibility for new providers
+
+**PromptManager** (`internal/llm/prompts.go`)
+- Centralized prompt template management
+- Provider-specific prompt customization
+- System prompts with tool availability context
+- Error handling and fallback strategies
+
+**Simplified Agent Flow** (`internal/agent/agent.go`)
+- Uses new processor/client system instead of direct LLM calls
+- Removed redundant `process*` functions
+- Single `prepareMCPTools()` helper function
+- Enhanced with UI feedback support
+
+### Legacy vs New Architecture
+
+**REMOVED (Legacy)**:
+- `CallOpenAIWithTools()`, `CallAnthropicWithTools()`, `CallLocalWithTools()`
+- `processOpenAIWithMCP()`, `processAnthropicWithMCP()`, `processLocalWithMCP()`
+- Duplicate `getString()` and `getMap()` functions across files
+
+**NEW (Refactored)**:
+- Interface-based client system with capability detection
+- Strategy Pattern processors for each provider
+- Factory Pattern for client creation
+- Centralized prompt management
+- Consolidated utilities in `pkg/utils/`
+
+### MCP Manager (Enhanced)
+- **stdio servers**: Skip health checks (no persistent connection needed)
+- **SSE/HTTP servers**: Maintain persistent connections with health monitoring
+- **Tool discovery**: Cached in `server.Tools` with full schema information
+- **LastPing updates**: Successful tool calls update server health timestamps
+- **Process storage**: Thread-safe operations with proper mutex handling
 
 **UI Package** (`internal/ui/`)
 - **ToolDisplayInterface**: Pluggable display system for different interaction modes
@@ -156,23 +247,119 @@ The heart of this system is the **OpenAI Function Calling ↔ MCP Tools** integr
 - Mutex-free stdio server registration to prevent deadlocks
 - Process maps store MCPProcessInterface implementations
 
-## Development Patterns
+## Development Patterns (New Architecture)
+
+### Adding New LLM Provider Support
+
+**1. Create Client Implementation**:
+```go
+// Implement base LLMClient interface
+type NewProviderClient struct {
+    provider *types.LLMProvider
+    apiKey   string
+    baseURL  string
+}
+
+func (c *NewProviderClient) ProcessMessage(message string) (string, error) {
+    // Basic message processing logic
+}
+
+func (c *NewProviderClient) GetProviderInfo() ProviderInfo {
+    return ProviderInfo{
+        Name:    c.provider.Name,
+        Type:    c.provider.Type,
+        Model:   c.provider.Model,
+        Healthy: c.IsHealthy(),
+    }
+}
+
+func (c *NewProviderClient) IsHealthy() bool {
+    // Health check logic
+}
+```
+
+**2. Implement Optional Capabilities**:
+```go
+// Add ToolSupport if provider supports function calling
+func (c *NewProviderClient) ProcessWithTools(message string, tools []Tool, toolCaller ToolCaller) (string, error) {
+    // Convert tools to provider format
+    // Implement conversation loop with tool execution
+    // Return final response
+}
+
+func (c *NewProviderClient) SupportsFunctionCalling() bool {
+    return true // or false based on capabilities
+}
+
+// Add ConversationSupport if provider supports multi-turn conversations
+func (c *NewProviderClient) ProcessConversation(session *types.ConversationSession) (string, error) {
+    // Convert conversation history to provider format
+    // Process with conversation context
+}
+
+func (c *NewProviderClient) SupportsConversation() bool {
+    return true // or false based on capabilities
+}
+```
+
+**3. Create Processor Implementation**:
+```go
+type NewProviderProcessor struct {
+    *BaseProcessor
+    client LLMClient
+}
+
+func NewNewProviderProcessor(provider *types.LLMProvider, promptManager PromptManager) *NewProviderProcessor {
+    client := NewNewProviderClient(provider)
+    return &NewProviderProcessor{
+        BaseProcessor: NewBaseProcessor(provider, promptManager),
+        client:        client,
+    }
+}
+
+// ProcessWithTools delegates to client with UI enhancements
+func (p *NewProviderProcessor) ProcessWithTools(message string, tools []Tool, toolCaller ToolCaller) (string, error) {
+    enhancedMessage := p.buildEnhancedMessage(message, len(tools))
+    
+    if toolSupport, ok := p.client.(ToolSupport); ok {
+        return toolSupport.ProcessWithTools(enhancedMessage, tools, toolCaller)
+    }
+    
+    // Fallback to basic processing
+    return p.client.ProcessMessage(enhancedMessage)
+}
+```
+
+**4. Update Factory**:
+```go
+// Add case to client_factory.go
+func (f *ClientFactory) CreateClient(provider *types.LLMProvider) (LLMClient, error) {
+    switch provider.Type {
+    case "newprovider":
+        return NewNewProviderClient(provider), nil
+    // existing cases...
+    }
+}
+```
+
+**5. Add Processor Factory**:
+```go
+// Add case to processor factory
+func NewLLMProcessor(provider *types.LLMProvider, promptManager PromptManager) LLMProcessor {
+    switch provider.Type {
+    case "newprovider":
+        return NewNewProviderProcessor(provider, promptManager)
+    // existing cases...
+    }
+}
+```
 
 ### Adding New MCP Server Support
 1. Test with stdio transport first (most reliable)
 2. Ensure tool discovery completes before marking as "available"
 3. Store tools in both `server.Capabilities` (names) and `server.Tools` (full schema)
 4. Handle process lifecycle: start → discover → store → health monitor
-
-### LLM Provider Integration
-```go
-// Must support OpenAI Function Calling for tool integration
-func CallProviderWithTools(provider, message, tools, toolCaller) {
-    // Convert MCP tools to provider's function format
-    // Implement conversation loop with tool execution
-    // Return final response after tool chain completion
-}
-```
+5. Use appropriate health check strategy based on transport type
 
 ### Tool Naming and Compatibility
 - MCP tool names: `server_name_tool_name` format
@@ -197,17 +384,44 @@ display.ShowSummary(executionSummary)
 
 **Display Wrapper Pattern**: Each UI enhancement is a wrapper around the base interface, allowing modular composition of features (spinners + timing + colors + interaction).
 
-## Project Structure Insights
+## Project Structure Insights (Refactored)
 
 **CLI Layer** (`cmd/`): Cobra commands with Viper config management
 **Internal Layer** (`internal/`): Core business logic, not importable externally
 **Types Layer** (`pkg/types/`): Shared data structures across all components
+**Utils Layer** (`pkg/utils/`): Common utility functions (GetString, GetMap)
 
-**Key Integration Points**:
-- `agent.go:processOpenAIWithMCP()` - Main LLM-MCP orchestration
-- `clients.go:CallOpenAIWithTools()` - Conversation loop implementation  
+**Key Integration Points (New Architecture)**:
+- `agent.go:ProcessRequestWithUI()` - Main LLM-MCP orchestration using processors
+- `processor.go:LLMProcessor` - Strategy interface for provider-specific processing
+- `client_interface.go:LLMClient` - Base interface with optional capabilities
+- `client_factory.go:CreateClient()` - Factory for creating appropriate clients
+- `prompts.go:PromptManager` - Centralized prompt template management
 - `manager.go:testStdioServer()` - MCP server validation and tool caching
 - `protocol.go:MCPProcess` - JSON-RPC communication handling
+
+**Removed Legacy Integration Points**:
+- ~~`agent.go:processOpenAIWithMCP()`~~ - Replaced with processor pattern
+- ~~`clients.go:CallOpenAIWithTools()`~~ - Functionality moved to individual clients
+- ~~`clients.go:CallAnthropicWithTools()`~~ - Replaced with AnthropicClient
+- ~~`clients.go:CallLocalWithTools()`~~ - Replaced with LocalClient
+
+**New File Organization** (`internal/llm/`):
+```
+llm/
+├── client_interface.go     # Core interfaces (LLMClient, ToolSupport, ConversationSupport)
+├── client_factory.go       # Factory Pattern for client creation
+├── prompts.go             # Centralized prompt management
+├── processor.go           # Strategy Pattern interface
+├── openai_client.go       # OpenAI-specific client implementation
+├── openai_processor.go    # OpenAI-specific processor implementation
+├── anthropic_client.go    # Anthropic-specific client implementation
+├── anthropic_processor.go # Anthropic-specific processor implementation
+├── local_client.go        # Local LLM client implementation
+├── local_processor.go     # Local LLM processor implementation
+├── clients.go             # Type definitions and conversion utilities
+└── manager.go             # Provider management (existing)
+```
 
 ## Build System
 
@@ -259,6 +473,21 @@ Enhanced LLM prompt engineering for better error recovery:
 - Common error hints provided to LLM
 - Alternative path suggestions for file operations
 - Never give up after single failure approach
+
+### Tool Calling Improvements
+Fixed and enhanced tool calling behavior:
+- **Aggressive tool usage**: System prioritizes tool usage for any system operation
+- **Clear examples**: "ping google" → automatically uses start_process tool
+- **Debug visibility**: Shows tool loading status and count during processing
+- **Context awareness**: Uses conversation history for follow-up questions
+- **Fallback prevention**: Never says "no capability" when tools are available
+
+### MCP Server Health Check Fixes
+Fixed critical issue where MCP servers became "unhealthy" after tool use:
+- **LastPing Updates**: Successful tool calls now update server.LastPing timestamp
+- **Transport-Aware Health Checks**: Different timeouts for stdio (5min) vs persistent (60s) servers
+- **Debug Logging**: Enhanced debug output for health check decisions and LastPing updates
+- **Root Cause**: stdio servers start fresh processes per tool call but weren't updating health status
 
 ## Configuration
 

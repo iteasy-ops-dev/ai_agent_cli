@@ -16,15 +16,24 @@ import (
 	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
 )
 
+// StreamResponse represents a streaming response chunk
+type StreamResponse struct {
+	Content string
+	Error   string
+	Done    bool
+}
+
 type Agent struct {
-	mcpManager *mcp.Manager
-	llmManager *llm.Manager
+	mcpManager       *mcp.Manager
+	llmManager       *llm.Manager
+	processorFactory llm.ProcessorFactory
 }
 
 func New(mcpManager *mcp.Manager, llmManager *llm.Manager) *Agent {
 	return &Agent{
-		mcpManager: mcpManager,
-		llmManager: llmManager,
+		mcpManager:       mcpManager,
+		llmManager:       llmManager,
+		processorFactory: llm.NewDefaultProcessorFactory(),
 	}
 }
 
@@ -57,7 +66,15 @@ func (a *Agent) ProcessRequest(message, mcpServerID, providerID string) (*types.
 		return response, nil
 	}
 
-	processedMessage, err := a.processWithLLM(message, provider)
+	// Create processor for this provider
+	processor, err := a.processorFactory.CreateProcessor(provider)
+	if err != nil {
+		response.Error = fmt.Sprintf("Failed to create processor: %v", err)
+		return response, nil
+	}
+
+	// Process with tools (no MCP tools for simple request)
+	processedMessage, err := processor.ProcessWithTools(message, []llm.Tool{}, nil)
 	if err != nil {
 		response.Error = fmt.Sprintf("LLM processing error: %v", err)
 		return response, nil
@@ -77,6 +94,184 @@ func (a *Agent) ProcessRequest(message, mcpServerID, providerID string) (*types.
 }
 
 // ProcessRequestWithUI processes a request with enhanced UI feedback
+// ProcessConversationWithStreaming processes a conversation with streaming support
+func (a *Agent) ProcessConversationWithStreaming(session *types.ConversationSession, message string, display ui.ToolDisplayInterface) (<-chan StreamResponse, error) {
+	ch := make(chan StreamResponse, 10)
+	
+	go func() {
+		defer close(ch)
+		
+		if display != nil {
+			display.ShowProgress("Initializing AI agent...")
+		}
+
+		// Add user message to conversation
+		session.AddMessage("user", message)
+
+
+
+		var provider *types.LLMProvider
+		var err error
+
+		if session.ProviderID != "" {
+			provider, err = a.llmManager.GetProvider(session.ProviderID)
+		} else {
+			provider, err = a.llmManager.GetActiveProvider()
+		}
+
+		if err != nil {
+			ch <- StreamResponse{Error: fmt.Sprintf("Provider error: %v", err)}
+			return
+		}
+
+		if display != nil {
+			display.ShowProgress("Finding LLM provider...")
+		}
+
+		// Create processor for this provider
+		processor, err := a.processorFactory.CreateProcessor(provider)
+		if err != nil {
+			ch <- StreamResponse{Error: fmt.Sprintf("Failed to create processor: %v", err)}
+			return
+		}
+
+		// Prepare MCP tools and tool caller
+		tools, toolCaller := a.prepareMCPTools(session.MCPServerID, display)
+
+		// Process conversation with streaming support
+		err = a.processConversationWithToolsStreaming(processor, session, tools, toolCaller, display, ch)
+		if err != nil {
+			ch <- StreamResponse{Error: fmt.Sprintf("Processing error: %v", err)}
+			return
+		}
+	}()
+	
+	return ch, nil
+}
+
+// ProcessConversation processes a message within a conversation context using the new processor system
+func (a *Agent) ProcessConversation(session *types.ConversationSession, message string, display ui.ToolDisplayInterface) (*types.AgentResponse, error) {
+	if display != nil {
+		display.ShowProgress("Initializing AI agent...")
+	}
+
+	// Add user message to conversation
+	session.AddMessage("user", message)
+
+	request := &types.AgentRequest{
+		ID:          uuid.New().String(),
+		Message:     message,
+		MCPServerID: session.MCPServerID,
+		ProviderID:  session.ProviderID,
+		CreatedAt:   time.Now(),
+	}
+
+	response := &types.AgentResponse{
+		ID:        uuid.New().String(),
+		RequestID: request.ID,
+		CreatedAt: time.Now(),
+	}
+
+	var provider *types.LLMProvider
+	var err error
+
+	if session.ProviderID != "" {
+		provider, err = a.llmManager.GetProvider(session.ProviderID)
+	} else {
+		provider, err = a.llmManager.GetActiveProvider()
+	}
+
+	if err != nil {
+		response.Error = fmt.Sprintf("Provider error: %v", err)
+		return response, nil
+	}
+
+	if display != nil {
+		display.ShowProgress("Finding LLM provider...")
+	}
+
+	// Create processor for this provider
+	processor, err := a.processorFactory.CreateProcessor(provider)
+	if err != nil {
+		response.Error = fmt.Sprintf("Failed to create processor: %v", err)
+		return response, nil
+	}
+
+	// Prepare MCP tools and tool caller
+	tools, toolCaller := a.prepareMCPTools(session.MCPServerID, display)
+
+	// Process conversation with UI feedback
+	result, err := processor.ProcessConversationWithUI(session, tools, toolCaller, display)
+	if err != nil {
+		response.Error = fmt.Sprintf("Processing error: %v", err)
+		return response, nil
+	}
+
+	// Add assistant response to conversation
+	session.AddMessage("assistant", result)
+
+	response.Message = result
+	return response, nil
+}
+
+// prepareMCPTools prepares MCP tools and creates a tool caller function
+func (a *Agent) prepareMCPTools(mcpServerID string, display ui.ToolDisplayInterface) ([]llm.Tool, llm.ToolCaller) {
+	if display != nil {
+		display.ShowProgress("Loading tools from MCP servers...")
+	}
+
+	// Get all available tools from MCP servers
+	allMCPTools := a.mcpManager.GetAllTools()
+	
+	var mcpTools []map[string]interface{}
+	
+	for serverName, tools := range allMCPTools {
+		// Clean server name for tool naming
+		cleanServerName := strings.ReplaceAll(serverName, " ", "_")
+		cleanServerName = strings.ReplaceAll(cleanServerName, "-", "_")
+		
+		for _, tool := range tools {
+			mcpTool := map[string]interface{}{
+				"name":        fmt.Sprintf("%s_%s", cleanServerName, tool.Name),
+				"description": fmt.Sprintf("[%s] %s", serverName, tool.Description),
+				"inputSchema": tool.Schema,
+				"serverName":  serverName,
+				"toolName":    tool.Name,
+			}
+			mcpTools = append(mcpTools, mcpTool)
+		}
+	}
+
+	if display != nil {
+		display.ShowProgress(fmt.Sprintf("✅ Loaded %d tools total", len(mcpTools)))
+	}
+
+	// Convert MCP tools to LLM format
+	tools := llm.ConvertMCPToolsToOpenAI(mcpTools)
+
+	// Create tool caller function
+	toolCaller := func(name string, args map[string]interface{}) (interface{}, error) {
+		// Find the corresponding MCP tool
+		for _, mcpTool := range mcpTools {
+			if mcpTool["name"] == name {
+				serverName := mcpTool["serverName"].(string)
+				toolName := mcpTool["toolName"].(string)
+				
+				// Find server ID by name
+				servers := a.mcpManager.ListServers()
+				for _, server := range servers {
+					if server.Name == serverName {
+						return a.mcpManager.CallTool(server.ID, toolName, args)
+					}
+				}
+			}
+		}
+		return nil, fmt.Errorf("tool %s not found", name)
+	}
+
+	return tools, toolCaller
+}
+
 func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, interactive bool) (*types.AgentResponse, error) {
 	// Create appropriate display interface with enhancements
 	var display ui.ToolDisplayInterface
@@ -121,7 +316,19 @@ func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, in
 		return response, nil
 	}
 
-	processedMessage, err := a.processWithLLMAndUI(message, provider, display)
+	// Create processor for this provider
+	processor, err := a.processorFactory.CreateProcessor(provider)
+	if err != nil {
+		display.ShowError(fmt.Errorf("Failed to create processor: %v", err))
+		response.Error = fmt.Sprintf("Failed to create processor: %v", err)
+		return response, nil
+	}
+
+	// Prepare MCP tools and tool caller
+	tools, toolCaller := a.prepareMCPTools(mcpServerID, display)
+
+	// Process with UI feedback
+	processedMessage, err := processor.ProcessWithUI(message, tools, toolCaller, display)
 	if err != nil {
 		display.ShowError(fmt.Errorf("LLM processing error: %v", err))
 		response.Error = fmt.Sprintf("LLM processing error: %v", err)
@@ -143,264 +350,30 @@ func (a *Agent) ProcessRequestWithUI(message, mcpServerID, providerID string, in
 	return response, nil
 }
 
-func (a *Agent) processWithLLM(message string, provider *types.LLMProvider) (string, error) {
-	// Get all available MCP tools
-	allTools := a.mcpManager.GetAllTools()
-	var mcpTools []map[string]interface{}
 
-	for serverName, tools := range allTools {
-		for _, tool := range tools {
-			// Clean server name for tool naming (remove spaces and special chars)
-			cleanServerName := strings.ReplaceAll(strings.ReplaceAll(serverName, " ", "_"), "-", "_")
-			mcpTool := map[string]interface{}{
-				"name":        fmt.Sprintf("%s_%s", cleanServerName, tool.Name),
-				"description": fmt.Sprintf("[%s] %s", serverName, tool.Description),
-				"inputSchema": tool.Schema,
-				"serverName":  serverName,
-				"toolName":    tool.Name,
-			}
-			mcpTools = append(mcpTools, mcpTool)
-		}
+
+
+// processConversationWithToolsStreaming handles conversation with tools and streaming
+func (a *Agent) processConversationWithToolsStreaming(processor llm.LLMProcessor, session *types.ConversationSession, tools []llm.Tool, toolCaller llm.ToolCaller, display ui.ToolDisplayInterface, ch chan<- StreamResponse) error {
+	// For now, we'll use the existing tool processing logic and stream the final result
+	// This ensures tools work correctly while providing streaming output
+	result, err := processor.ProcessConversationWithUI(session, tools, toolCaller, display)
+	if err != nil {
+		return err
 	}
-
-	switch provider.Type {
-	case "openai":
-		return a.processOpenAIWithMCP(message, provider, mcpTools)
-	case "anthropic":
-		return a.processAnthropic(message, provider)
-	case "google":
-		return a.processGoogle(message, provider)
-	case "local":
-		return a.processLocal(message, provider)
-	default:
-		return "", fmt.Errorf("unsupported provider type: %s", provider.Type)
+	
+	// Add assistant response to conversation
+	session.AddMessage("assistant", result)
+	
+	// Stream the final result character by character for streaming effect
+	for _, char := range result {
+		ch <- StreamResponse{Content: string(char)}
+		// Small delay to simulate streaming effect
+		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-// processWithLLMAndUI processes message with LLM and UI feedback
-func (a *Agent) processWithLLMAndUI(message string, provider *types.LLMProvider, display ui.ToolDisplayInterface) (string, error) {
-	// Get all available MCP tools
-	allTools := a.mcpManager.GetAllTools()
-	var mcpTools []map[string]interface{}
-
-	for serverName, tools := range allTools {
-		for _, tool := range tools {
-			// Clean server name for tool naming (remove spaces and special chars)
-			cleanServerName := strings.ReplaceAll(strings.ReplaceAll(serverName, " ", "_"), "-", "_")
-			mcpTool := map[string]interface{}{
-				"name":        fmt.Sprintf("%s_%s", cleanServerName, tool.Name),
-				"description": fmt.Sprintf("[%s] %s", serverName, tool.Description),
-				"inputSchema": tool.Schema,
-				"serverName":  serverName,
-				"toolName":    tool.Name,
-			}
-			mcpTools = append(mcpTools, mcpTool)
-		}
-	}
-
-	switch provider.Type {
-	case "openai":
-		return a.processOpenAIWithMCPAndUI(message, provider, mcpTools, display)
-	case "anthropic":
-		return a.processAnthropic(message, provider)
-	case "google":
-		return a.processGoogle(message, provider)
-	case "local":
-		return a.processLocal(message, provider)
-	default:
-		return "", fmt.Errorf("unsupported provider type: %s", provider.Type)
-	}
-}
-
-func (a *Agent) processOpenAI(message string, provider *types.LLMProvider) (string, error) {
-	return llm.CallOpenAI(provider, message)
-}
-
-func (a *Agent) processOpenAIWithMCP(message string, provider *types.LLMProvider, mcpTools []map[string]interface{}) (string, error) {
-	// Enhance message with tool availability context
-	enhancedMessage := message
-	if len(mcpTools) > 0 {
-		enhancedMessage = fmt.Sprintf(`%s
-
-Available tools: %d desktop tools including file operations, system commands, and process management.
-Use multiple tools as needed to provide comprehensive answers.`, message, len(mcpTools))
-	}
-
-	// Convert MCP tools to OpenAI format
-	tools := llm.ConvertMCPToolsToOpenAI(mcpTools)
-
-	// Create tool caller function
-	toolCaller := func(name string, args map[string]interface{}) (interface{}, error) {
-		// Find the corresponding MCP tool
-		for _, mcpTool := range mcpTools {
-			if mcpTool["name"] == name {
-				serverName := mcpTool["serverName"].(string)
-				toolName := mcpTool["toolName"].(string)
-
-				// Find server ID by name
-				servers := a.mcpManager.ListServers()
-				for _, server := range servers {
-					if server.Name == serverName {
-						return a.mcpManager.CallTool(server.ID, toolName, args)
-					}
-				}
-				return nil, fmt.Errorf("server %s not found", serverName)
-			}
-		}
-		return nil, fmt.Errorf("tool %s not found", name)
-	}
-
-	// If no tools available, fall back to regular call
-	if len(tools) == 0 {
-		return llm.CallOpenAI(provider, enhancedMessage)
-	}
-
-	return llm.CallOpenAIWithTools(provider, enhancedMessage, tools, toolCaller)
-}
-
-// processOpenAIWithMCPAndUI processes OpenAI with MCP tools and UI feedback
-func (a *Agent) processOpenAIWithMCPAndUI(message string, provider *types.LLMProvider, mcpTools []map[string]interface{}, display ui.ToolDisplayInterface) (string, error) {
-	// Enhance message with tool availability context
-	enhancedMessage := message
-	if len(mcpTools) > 0 {
-		enhancedMessage = fmt.Sprintf(`%s
-
-Available tools: %d desktop tools including file operations, system commands, and process management.
-Use multiple tools as needed to provide comprehensive answers.`, message, len(mcpTools))
-	}
-
-	// Convert MCP tools to OpenAI format
-	tools := llm.ConvertMCPToolsToOpenAI(mcpTools)
-
-	// Create execution summary tracker
-	summary := ui.ExecutionSummary{
-		ToolCalls: []ui.ToolCallRecord{},
-	}
-
-	// Track user control state
-	var userAborted bool
-	var autoApproveAll bool
-
-	// Create tool caller function with UI feedback
-	toolCaller := func(name string, args map[string]interface{}) (interface{}, error) {
-		// Check abort status first
-		if userAborted {
-			return nil, fmt.Errorf("execution aborted by user - no further tools will be executed")
-		}
-
-		// Check auto-approve status
-		if autoApproveAll {
-			display.ShowProgress("Auto-approving tool due to 'auto-approve all' selection")
-			// Continue with normal execution (don't return early)
-		}
-		// Find the corresponding MCP tool
-		for _, mcpTool := range mcpTools {
-			if mcpTool["name"] == name {
-				serverName := mcpTool["serverName"].(string)
-				toolName := mcpTool["toolName"].(string)
-
-				// Show tool call to user
-				display.ShowToolCall(serverName, toolName, args)
-
-				// In interactive mode, ask for approval (unless auto-approve is active)
-				var approved bool
-				if autoApproveAll {
-					// Auto-approve mode: don't ask, just approve
-					approved = true
-					display.ShowProgress("Auto-approving tool execution")
-				} else {
-					// Normal mode: ask for approval
-					var err error
-					approved, err = display.PromptToolApproval(serverName, toolName, args)
-					if err != nil {
-						if err.Error() == "AUTO_APPROVE_ALL" {
-							autoApproveAll = true
-							display.ShowProgress("Auto-approve mode activated - remaining tools will be executed automatically")
-							approved = true // Approve this tool too
-						} else if err.Error() == "ABORT" {
-							userAborted = true
-							display.ShowError(fmt.Errorf("execution aborted by user"))
-							return nil, fmt.Errorf("execution aborted by user - session terminated")
-						} else {
-							return nil, err
-						}
-					}
-
-					if !approved {
-						display.ShowProgress("Tool execution skipped by user")
-						return "Tool execution skipped by user", nil
-					}
-				}
-
-				// Record start time
-				startTime := time.Now()
-
-				// Find server ID by name and execute tool
-				servers := a.mcpManager.ListServers()
-				for _, server := range servers {
-					if server.Name == serverName {
-						result, err := a.mcpManager.CallTool(server.ID, toolName, args)
-						duration := time.Since(startTime)
-
-						// Record tool call
-						record := ui.ToolCallRecord{
-							ServerName: serverName,
-							ToolName:   toolName,
-							Duration:   duration,
-							Success:    err == nil,
-						}
-						if err != nil {
-							record.Error = err.Error()
-							display.ShowError(err)
-						} else {
-							display.ShowToolResult(result, duration)
-						}
-						summary.ToolCalls = append(summary.ToolCalls, record)
-						summary.TotalTools++
-						if err == nil {
-							summary.SuccessfulCalls++
-						} else {
-							summary.FailedCalls++
-						}
-						summary.TotalDuration += duration
-
-						return result, err
-					}
-				}
-				return nil, fmt.Errorf("server %s not found", serverName)
-			}
-		}
-		return nil, fmt.Errorf("tool %s not found", name)
-	}
-
-	// If no tools available, fall back to regular call
-	if len(tools) == 0 {
-		display.ShowProgress("Processing with LLM (no tools available)...")
-		return llm.CallOpenAI(provider, enhancedMessage)
-	}
-
-	display.ShowProgress("Processing with LLM and available tools...")
-	result, err := llm.CallOpenAIWithTools(provider, enhancedMessage, tools, toolCaller)
-
-	// Show execution summary if tools were used
-	if summary.TotalTools > 0 {
-		display.ShowSummary(summary)
-	}
-
-	return result, err
-}
-
-func (a *Agent) processAnthropic(message string, provider *types.LLMProvider) (string, error) {
-	return llm.CallAnthropic(provider, message)
-}
-
-func (a *Agent) processGoogle(message string, provider *types.LLMProvider) (string, error) {
-	// Google API implementation would go here
-	return fmt.Sprintf("[Google %s] Processed: %s", provider.Model, message), nil
-}
-
-func (a *Agent) processLocal(message string, provider *types.LLMProvider) (string, error) {
-	return llm.CallLocal(provider, message)
+	ch <- StreamResponse{Done: true}
+	
+	return nil
 }
 
 func (a *Agent) processWithMCP(message, serverID string) (map[string]interface{}, error) {
@@ -476,3 +449,4 @@ func (a *Agent) handleLLMProviders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(providers)
 }
+

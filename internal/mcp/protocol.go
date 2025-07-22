@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/iteasy-ops-dev/syseng-agent/pkg/types"
+	"github.com/iteasy-ops-dev/syseng-agent/pkg/utils"
 )
 
 type MCPProcess struct {
@@ -195,9 +196,9 @@ func (p *MCPProcess) discoverTools() error {
 			for _, toolData := range tools {
 				if toolMap, ok := toolData.(map[string]interface{}); ok {
 					tool := Tool{
-						Name:        getString(toolMap, "name"),
-						Description: getString(toolMap, "description"),
-						Schema:      getMap(toolMap, "inputSchema"),
+						Name:        utils.GetString(toolMap, "name"),
+						Description: utils.GetString(toolMap, "description"),
+						Schema:      utils.GetMap(toolMap, "inputSchema"),
 					}
 					p.tools[tool.Name] = tool
 				}
@@ -367,16 +368,3 @@ func (p *MCPProcess) readErrors() {
 	}
 }
 
-func getString(m map[string]interface{}, key string) string {
-	if val, ok := m[key].(string); ok {
-		return val
-	}
-	return ""
-}
-
-func getMap(m map[string]interface{}, key string) map[string]interface{} {
-	if val, ok := m[key].(map[string]interface{}); ok {
-		return val
-	}
-	return make(map[string]interface{})
-}

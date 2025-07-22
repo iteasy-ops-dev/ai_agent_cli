@@ -56,6 +56,84 @@ type AgentResponse struct {
 	CreatedAt time.Time              `json:"created_at"`
 }
 
+// ConversationMessage represents a single message in a conversation
+type ConversationMessage struct {
+	Role      string    `json:"role"`      // "user", "assistant", "system", "tool"
+	Content   string    `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string   `json:"tool_call_id,omitempty"`
+	Name      string    `json:"name,omitempty"` // For tool messages
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ToolCall represents a function/tool call
+type ToolCall struct {
+	ID       string                 `json:"id"`
+	Type     string                 `json:"type"`
+	Function ToolCallFunction       `json:"function"`
+}
+
+// ToolCallFunction represents the function details in a tool call
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ConversationSession manages the state of a conversation
+type ConversationSession struct {
+	ID           string                `json:"id"`
+	UserID       string                `json:"user_id,omitempty"`
+	Messages     []ConversationMessage `json:"messages"`
+	MCPServerID  string                `json:"mcp_server_id,omitempty"`
+	ProviderID   string                `json:"provider_id,omitempty"`
+	Interactive  bool                  `json:"interactive"`
+	CreatedAt    time.Time             `json:"created_at"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+}
+
+// AddMessage adds a message to the conversation session
+func (cs *ConversationSession) AddMessage(role, content string) {
+	cs.Messages = append(cs.Messages, ConversationMessage{
+		Role:      role,
+		Content:   content,
+		Timestamp: time.Now(),
+	})
+	cs.UpdatedAt = time.Now()
+}
+
+// AddToolCall adds a tool call message to the conversation
+func (cs *ConversationSession) AddToolCall(toolCalls []ToolCall) {
+	cs.Messages = append(cs.Messages, ConversationMessage{
+		Role:      "assistant",
+		Content:   "",
+		ToolCalls: toolCalls,
+		Timestamp: time.Now(),
+	})
+	cs.UpdatedAt = time.Now()
+}
+
+// AddToolResult adds a tool result message to the conversation
+func (cs *ConversationSession) AddToolResult(toolCallID, toolName, result string) {
+	cs.Messages = append(cs.Messages, ConversationMessage{
+		Role:       "tool",
+		Content:    result,
+		ToolCallID: toolCallID,
+		Name:       toolName,
+		Timestamp:  time.Now(),
+	})
+	cs.UpdatedAt = time.Now()
+}
+
+// GetLastUserMessage returns the last user message content
+func (cs *ConversationSession) GetLastUserMessage() string {
+	for i := len(cs.Messages) - 1; i >= 0; i-- {
+		if cs.Messages[i].Role == "user" {
+			return cs.Messages[i].Content
+		}
+	}
+	return ""
+}
+
 type Config struct {
 	Server struct {
 		Port string `mapstructure:"port"`
